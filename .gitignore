@@ -1,0 +1,26 @@
+.venv
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Virtual environment
+.venv/
+
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+
+# Environment variables
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db

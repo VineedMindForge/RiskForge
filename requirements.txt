@@ -1,0 +1,11 @@
+pandas
+numpy
+yfinance
+streamlit
+jupyter
+plotly
+matplotlib
+scipy
+ipykernel
+arch
+ipywidgets
