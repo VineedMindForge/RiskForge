@@ -2,6 +2,63 @@
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+def identify_worst_portfolio_scenarios(portfolio_returns, portfolio_value, horizons=(1, 5, 20), top_n=5):
+    """Identify the worst historical portfolio return windows."""
+
+    if not np.isfinite(portfolio_value) or portfolio_value < 0:
+        raise ValueError("portfolio_value must be finite and non-negative.")
+
+    if top_n < 1 or int(top_n) != top_n:
+        raise ValueError("top_n must be a positive integer.")
+
+    if not horizons or any(h < 1 or int(h) != h for h in horizons):
+        raise ValueError("horizons must contain positive integers.")
+
+    if portfolio_returns.isna().any() or not np.isfinite(portfolio_returns).all():
+        raise ValueError("Portfolio returns must contain finite values.")
+
+    if (portfolio_returns <= -1).any():
+        raise ValueError("Portfolio returns cannot be below or equal to -100%.")
+
+    if not portfolio_returns.index.is_unique or not portfolio_returns.index.is_monotonic_increasing:
+        raise ValueError("Portfolio returns must have unique dates sorted in ascending order.")
+
+    results = {}
+
+    for horizon in horizons:
+        if len(portfolio_returns) < horizon:
+            raise ValueError(f"Insufficient observations for the {horizon}-day horizon.")
+
+        rolling_returns = (
+            (1 + portfolio_returns)
+            .rolling(horizon)
+            .apply(np.prod, raw=True) - 1
+        ).dropna()
+
+        worst_scenarios = rolling_returns.nsmallest(top_n)
+        scenario_results = []
+
+        for rank, (end_date, stress_return) in enumerate(worst_scenarios.items(), start=1):
+            end_position = portfolio_returns.index.get_loc(end_date)
+            start_date = portfolio_returns.index[end_position - horizon + 1]
+
+            stress_pnl = portfolio_value * stress_return
+
+            scenario_results.append({
+                "Rank": rank,
+                "Start Date": start_date,
+                "End Date": end_date,
+                "Stress Return": stress_return,
+                "Stress P&L": stress_pnl,
+                "Stressed Portfolio Value": portfolio_value + stress_pnl
+            })
+
+        results[horizon] = pd.DataFrame(scenario_results).set_index("Rank")
+
+    return results
 
 
 def calculate_stress_impact(weights, shocks, portfolio_value):
@@ -178,3 +235,118 @@ def calculate_asset_stress_contributions(weights, shocks, portfolio_value):
     })
 
     return contributions.sort_values("Stress P&L")
+
+def calculate_historical_stress_attribution(asset_returns, portfolio_returns, allocation_drift, start_date, end_date, portfolio_value):
+    """Calculate exact asset-level P&L contributions during a historical stress period."""
+
+    asset_returns = asset_returns.loc[start_date:end_date]
+    portfolio_returns = portfolio_returns.loc[start_date:end_date]
+    allocation_drift = allocation_drift.loc[start_date:end_date]
+
+    common_dates = portfolio_returns.index.intersection(asset_returns.index).intersection(allocation_drift.index)
+
+    asset_returns = asset_returns.loc[common_dates]
+    portfolio_returns = portfolio_returns.loc[common_dates]
+    allocation_drift = allocation_drift.loc[common_dates]
+
+    if asset_returns.empty:
+        raise ValueError("No matching return observations found for the selected period.")
+
+    if not np.isfinite(asset_returns.to_numpy()).all() or not np.isfinite(portfolio_returns.to_numpy()).all():
+        raise ValueError("Returns must contain finite values.")
+
+    if not np.isfinite(allocation_drift.to_numpy()).all():
+        raise ValueError("Allocation weights must be finite.")
+
+    if not np.allclose(
+        (asset_returns * allocation_drift).sum(axis=1),
+        portfolio_returns,
+        atol=1e-8
+    ):
+        raise ValueError("Asset returns and allocation weights do not reconcile with portfolio returns.")
+
+    # Portfolio value at the beginning of each daily return period
+    daily_starting_value = portfolio_value * (1 + portfolio_returns).cumprod().shift(1).fillna(1)
+
+    # Calculate each asset's daily monetary contribution
+    daily_asset_pnl = asset_returns * allocation_drift.mul(daily_starting_value, axis=0)
+
+    # Aggregate contributions across the stress period
+    asset_pnl = daily_asset_pnl.sum()
+
+    total_stress_pnl = portfolio_value * ((1 + portfolio_returns).prod() - 1)
+
+    contributions = pd.DataFrame({
+        "Asset Return": (1 + asset_returns).prod() - 1,
+        "Stress Contribution": asset_pnl / portfolio_value,
+        "Stress P&L": asset_pnl,
+        "Contribution (%)": asset_pnl / total_stress_pnl * 100 if total_stress_pnl != 0 else np.nan
+    })
+
+    return contributions.sort_values("Stress P&L")
+
+def plot_asset_stress_attribution(attribution):
+    """Compare individual asset returns and portfolio return contributions."""
+
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=attribution.index,
+        y=attribution["Asset Return"] * 100,
+        name="Asset Return",
+        text=attribution["Asset Return"].map(lambda x: f"{x:.2%}"),
+        textposition="outside"
+    ))
+
+    fig.add_trace(go.Bar(
+        x=attribution.index,
+        y=attribution["Stress Contribution"] * 100,
+        name="Portfolio Contribution",
+        text=attribution["Stress Contribution"].map(lambda x: f"{x:.2%}"),
+        textposition="outside"
+    ))
+
+    fig.update_layout(
+        title="Asset Returns vs Portfolio Return Contributions",
+        template="plotly_white",
+        xaxis_title="Asset",
+        yaxis_title="Return / Contribution (%)",
+        barmode="group",
+        height=330,
+        legend_title=None
+    )
+
+    fig.update_yaxes(ticksuffix="%")
+
+    return fig
+
+def plot_stress_pnl_attribution(attribution):
+    """Plot monetary stress P&L contributions by asset."""
+
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=attribution["Stress P&L"],
+        y=attribution.index,
+        orientation="h",
+        text=attribution["Stress P&L"].map(lambda x: f"${x:,.2f}"),
+        textposition="outside",
+        marker_color="#EF553B"
+    ))
+
+    fig.update_layout(
+        title="Asset Contribution to Portfolio Stress Loss",
+        template="plotly_white",
+        xaxis_title="Stress P&L ($)",
+        yaxis_title=None,
+        height=280,
+        showlegend=False
+    )
+
+    fig.update_xaxes(tickprefix="$")
+
+    return fig
