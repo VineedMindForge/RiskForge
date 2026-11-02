@@ -1,189 +1,478 @@
-# Market Risk Project — reusable Python modules
+# Equity Portfolio Market Risk Engine
 
-These files are the calculation and chart layer extracted from `market_modules.ipynb`.
-They are **not** the Streamlit pages. The Streamlit pages will collect user inputs,
-call these functions, and display the returned values and Plotly figures.
+A Python-based market risk analytics application for constructing and
+monitoring **equity portfolios made up of selected stocks**. Built with
+Streamlit, it combines portfolio construction, market data analytics,
+Value at Risk (VaR), Expected Shortfall, backtesting, stress testing and
+drawdown analysis.
 
-## File responsibilities
+> **Project scope:** This application currently focuses on portfolios of
+> selected listed equities. It is not a universal multi-asset risk
+> platform. Users select stocks from a locally maintained universe,
+> assign weights and analyze the resulting equity portfolio.
 
-### `market_data.py`
-Shared market-data ingestion used by both application pages.
+## Table of Contents
 
-- `download_data()` downloads adjusted daily closing prices with yfinance.
-- `validate_market_data()` reports missing observations, invalid prices and duplicate dates.
-- `downloaded_data_validation` is retained as a backwards-compatible alias.
+-   [Overview](#overview)
+-   [Features](#features)
+-   [Application Workflow](#application-workflow)
+-   [Detailed Page Guide](#detailed-page-guide)
+-   [Risk Methodologies](#risk-methodologies)
+-   [Technology Stack](#technology-stack)
+-   [Project Structure](#project-structure)
+-   [Installation](#installation)
+-   [Run the Application](#run-the-application)
+-   [Assumptions and Limitations](#assumptions-and-limitations)
+-   [Disclaimer](#disclaimer)
 
-Do not interpolate financial prices automatically. The module reports missing
-observations but leaves the decision about alignment or exclusion to the caller.
+## Overview
 
-### `portfolio_construction.py`
-Calculations and visualizations for Page 1 — Portfolio Construction.
+The Equity Portfolio Market Risk Engine demonstrates an end-to-end
+workflow for constructing, analyzing and monitoring a portfolio of
+selected stocks.
 
-- `calculate_portfolio_returns()` supports Daily, Monthly and Buy and Hold.
-- It returns both portfolio returns and beginning-of-day allocation weights.
-- `calculate_portfolio_value()` compounds returns and includes the initial
-  investment at the supplied initial date.
-- `calculate_returns_metrics()`, `calculate_volatility_metrics()` and
-  `calculate_portfolio_metrics()` calculate portfolio performance statistics.
-- `plot_portfolio_vs_assets()`, `plot_allocation_over_time()` and
-  `plot_current_allocation()` return Plotly figures.
+The user selects equities from a CSV-based stock universe, assigns
+portfolio weights, specifies an investment period and initial
+investment, and chooses a rebalancing methodology. The application
+downloads adjusted daily closing prices, validates the data and
+calculates portfolio returns and value. Those portfolio results are then
+used across the analytics, VaR, backtesting, stress-testing and
+dashboard pages.
 
-### `market_data_analytics.py`
-Individual-asset calculations and visualizations for Page 2 — Market Data & Analytics.
+## Typical Workflow
 
-- Asset and return statistics.
-- Rolling, EWMA and GARCH volatility.
-- Correlation matrix and selected-pair rolling correlation.
-- Jarque-Bera normality test.
-- Plotly charts for prices, returns, distributions, volatility, correlations
-  and normality-test p-values.
+```mermaid
+flowchart LR
+    A["1. PORTFOLIO SETUP<br/><br/>Portfolio Construction<br/>Select stocks, assign weights,<br/>investment period and capital"]
 
-Covariance matrix, Ljung-Box/autocorrelation test and Q-Q plot data are not
-included, per the current project scope. A covariance matrix may still be
-needed internally by later parametric portfolio-risk calculations.
+    B["2. MARKET ANALYSIS<br/><br/>Market Data Analytics<br/>Returns, volatility, correlations<br/>and distributions"]
 
-## Install dependencies
+    C["3. RISK MEASUREMENT<br/><br/>VaR and ES<br/>Historical, Parametric and<br/>Monte Carlo VaR and ES"]
 
-In the project's activated virtual environment:
+    D["4. MODEL VALIDATION<br/><br/>Backtesting<br/>VaR exceptions, Kupiec POF<br/>and Christoffersen tests"]
 
-```bash
-python -m pip install pandas numpy yfinance scipy plotly arch streamlit
+    E["5. STRESS ANALYSIS<br/><br/>Stress Testing<br/>Historical shocks, custom<br/>scenarios and attribution"]
+
+    F["6. RISK MONITORING<br/><br/>Executive Dashboard<br/>Portfolio performance, P&L,<br/>VaR and drawdown"]
+
+    A --> B --> C --> D --> E --> F
+
+    classDef setup fill:#1E3A5F,stroke:#4A90D9,color:#FFFFFF
+    classDef analytics fill:#164E45,stroke:#42B89C,color:#FFFFFF
+    classDef measurement fill:#67421D,stroke:#E5A443,color:#FFFFFF
+    classDef validation fill:#632B35,stroke:#D96B78,color:#FFFFFF
+    classDef stress fill:#59451C,stroke:#D6B34A,color:#FFFFFF
+    classDef monitoring fill:#44315F,stroke:#A58AD4,color:#FFFFFF
+
+    class A setup
+    class B analytics
+    class C measurement
+    class D validation
+    class E stress
+    class F monitoring
 ```
 
-`arch` is only needed for GARCH calculations. The GARCH import is lazy, so the
-other analytics can be used without loading that package until GARCH is called.
+## Features
 
-## Suggested project layout
+-   Equity portfolio construction using a configurable local ticker
+    universe.
+-   Long-only portfolio weights and configurable initial investment.
+-   Buy and Hold, Daily and Monthly rebalancing.
+-   Daily adjusted-price download and data-quality reporting.
+-   Asset return statistics, rolling volatility, EWMA and GARCH
+    volatility.
+-   Correlation matrices and rolling correlation analysis.
+-   Return distribution visualization and Jarque--Bera normality
+    testing.
+-   Historical Simulation, Parametric and Monte Carlo VaR and Expected
+    Shortfall.
+-   VaR backtesting, including Kupiec and Christoffersen tests.
+-   Historical worst-case scenarios and custom stock-level shocks.
+-   Portfolio drawdown and recovery analysis.
+-   Consolidated Executive Dashboard.
 
-```text
-quantitative-risk-model-validation/
-│
+## Application Workflow
+
+The application is organized as six pages, with `app.py` acting as the
+entry point and navigation controller.
+
+### 1. Executive Dashboard
+
+The dashboard is the consolidated portfolio monitoring view.
+
+**Portfolio Overview** - **Portfolio Value:** Latest calculated
+portfolio value. - **Daily P&L:** Change in portfolio value between the
+latest two observations. - **Total Return:** Cumulative portfolio return
+over the investment period. - **CAGR:** Annualized compound growth
+rate. - **Annualized Volatility:** Standard deviation of daily portfolio
+returns annualized using 252 trading days. - **Sharpe Ratio:**
+Risk-adjusted return measure using the risk-free-rate assumption in the
+portfolio metrics calculation. - **Initial Investment:** Starting
+capital used to construct the portfolio.
+
+**Portfolio Performance:** A time series of portfolio value over the
+selected investment period.
+
+**Risk Snapshot** - **Historical VaR:** One-day Historical Simulation
+VaR at the configured confidence level and lookback. - **Latest Daily
+Return:** Most recent portfolio return observation. - **Current
+Drawdown:** Current value relative to the running peak. - **Maximum
+Drawdown:** Largest peak-to-trough decline in the available portfolio
+history. - **Recovery Status:** Whether the portfolio has recovered to
+the peak associated with its maximum drawdown.
+
+**Portfolio Drawdown:** Shows the percentage decline from the running
+portfolio peak through time.
+
+**Daily Loss vs Historical VaR:** Compares the latest realized daily
+loss with the Historical Simulation VaR threshold. This is a simple
+latest-observation comparison, not a replacement for formal VaR
+backtesting.
+
+### 2. Portfolio Construction
+
+This page defines the equity portfolio used by the rest of the
+application.
+
+**Stock universe and selection:** Available tickers are loaded from
+`data/stock_universe.csv`. The universe is maintained locally; it is not
+dynamically downloaded.
+
+**Weights:** Users assign a weight to each selected stock. The current
+portfolio construction logic is long-only: weights must be non-negative
+and sum to 100%.
+
+**Investment settings:** Users set the investment start and end dates,
+initial investment amount and rebalancing frequency.
+
+**Rebalancing methods** - **Buy and Hold:** Initial weights are allowed
+to drift as stock prices change. - **Daily:** The portfolio is
+rebalanced to target weights each trading day. - **Monthly:** The
+portfolio is rebalanced to target weights at monthly rebalancing points.
+
+These methods produce different portfolio return paths and therefore
+different downstream risk estimates.
+
+**Market data and quality checks:** Adjusted daily closing prices are
+downloaded through `yfinance`. The market data module supports up to ten
+years of history by default. Each ticker is returned with the history
+available for it.
+
+The data-quality report includes valid observation counts, missing
+observations and percentages, invalid prices, duplicate dates, first and
+last available dates, latest valid price and latest valid price date.
+Leading missing observations before a stock's first available price are
+treated as expected history gaps. Missing prices are not automatically
+interpolated or forward-filled.
+
+### 3. Market Data Analytics
+
+This page focuses on the historical behaviour of the selected stocks.
+
+**Daily returns**
+
+Simple daily returns are calculated from adjusted closing prices:
+
+$$r_t = \frac{P_t}{P_{t-1}} - 1$$
+
+where $P_t$ is the adjusted closing price at time $t$.
+
+Descriptive statistics include mean return, annualized return, daily and
+annualized volatility, skewness, excess kurtosis, best daily return and
+worst daily return.
+
+**Volatility** - **Rolling volatility:** Rolling standard deviation of
+returns, annualized using 252 trading days. - **EWMA volatility:**
+Exponentially weighted volatility based on squared daily returns. The
+analytics function uses a decay factor of 0.94 by default. -
+**GARCH(1,1):** Conditional volatility estimated with a GARCH(1,1)
+model, zero-mean specification and normally distributed innovations.
+
+**Correlation:** The page calculates correlations between selected-stock
+daily returns. Correlations can be examined over the full available
+history or a recent lookback window. Rolling correlation can be used to
+examine the changing relationship between two stocks.
+
+**Return distribution and normality:** Histograms and normal reference
+curves help compare observed returns with a normal distribution. The
+page also calculates skewness, excess kurtosis and the Jarque--Bera
+normality test.
+
+### 4. VaR and Expected Shortfall
+
+This page estimates portfolio downside risk using three approaches.
+
+**Value at Risk (VaR)** is a loss threshold for a specified confidence
+level and holding period. A one-day 95% VaR estimates a threshold that
+losses are expected to exceed in approximately 5% of observations under
+the model assumptions. VaR is not the maximum possible loss.
+
+**Historical Simulation** 1. Select the historical portfolio-return
+window. 2. Compound returns over the chosen holding period. 3. Find the
+lower-tail empirical return quantile corresponding to the confidence
+level. 4. Convert the negative return threshold into a VaR amount. 5.
+Calculate Expected Shortfall as the average loss among observations at
+or beyond the VaR threshold.
+
+**Parametric method:** Uses the sample mean and standard deviation of
+portfolio returns with a normal-distribution quantile to estimate VaR
+and Expected Shortfall. The results depend on the normality assumption.
+
+**Monte Carlo method:** Simulates correlated stock returns using a
+multivariate normal distribution estimated from historical asset-return
+means and covariance. Simulated asset returns are combined using
+portfolio weights to obtain simulated portfolio returns. The current
+implementation applies target weights each simulated day and uses a
+fixed random seed by default for reproducibility.
+
+**Comparison and sensitivity:** The page compares VaR and Expected
+Shortfall across Historical, Parametric and Monte Carlo methods and
+supports sensitivity analysis across confidence levels and holding
+periods.
+
+### 5. Backtesting
+
+Backtesting evaluates VaR forecasts against subsequently realized
+portfolio returns. A VaR exception occurs when the realized portfolio
+loss exceeds the VaR forecast for that observation.
+
+The application supports Historical, Parametric, EWMA and GARCH VaR
+forecasts and reports exception counts and rates.
+
+-   **Kupiec Proportion of Failures (POF):** Tests whether the observed
+    exception frequency is consistent with the expected exception
+    probability.
+-   **Christoffersen independence test:** Examines whether exceptions
+    occur independently or cluster over time.
+-   **Conditional coverage test:** Combines exception-frequency and
+    independence components.
+
+Backtesting evaluates how the VaR model performs against realized
+outcomes; it is distinct from simply displaying a VaR estimate.
+
+### 6. Stress Testing
+
+Stress testing examines the impact of severe historical conditions and
+user-defined stock-price shocks.
+
+**Worst historical portfolio scenarios:** Identifies the worst
+compounded portfolio-return windows for configurable horizons, including
+one-, five- and twenty-day periods. Results include dates, stress
+return, stress P&L and stressed portfolio value.
+
+**Historical stock scenarios:** Identifies severe historical
+stock-return windows and applies the resulting stock-level shocks to the
+current target weights. This helps examine how the current portfolio
+composition would have behaved under selected historical stock shocks.
+
+**Custom scenarios:** Users define named scenarios by assigning
+percentage shocks to selected stocks. Unspecified stocks receive a zero
+shock.
+
+For portfolio weights ($w_i$) and stock shocks ($s_i$):
+
+$$
+R_{\text{stress}} = \sum_i w_i s_i
+$$
+
+$$
+\text{Stress P\&L} = V_0 \times R_{\text{stress}}
+$$
+
+$$
+V_{\text{stressed}} = V_0 + \text{Stress P\&L}
+$$
+
+where $V_0$ is the portfolio value used in the scenario calculation.
+
+**Stress attribution:** Stock-level P&L contributions show how
+individual positions contribute to the total stress outcome. Historical
+stress attribution uses asset returns and allocation drift over the
+selected period to reconcile asset contributions with portfolio returns.
+
+## Risk Methodologies
+
+![Portfolio Performance](https://img.shields.io/badge/PORTFOLIO_PERFORMANCE-245B8F?style=for-the-badge)
+| Measure | Method | Purpose |
+|---|---|---|
+| Portfolio Returns | Weighted portfolio returns | Measure portfolio performance |
+| Drawdown | Decline from running peak | Measure peak-to-trough losses |
+
+
+
+![Volatility Estimation](https://img.shields.io/badge/VOLATILITY_ESTIMATION-16836C?style=for-the-badge)
+| Measure | Method | Purpose |
+|---|---|---|
+| Rolling Volatility | Rolling standard deviation | Measure recent realized variability |
+| EWMA Volatility | Exponentially weighted moving average | Weight recent observations more heavily |
+| GARCH Volatility | GARCH(1,1) | Estimate conditional volatility |
+
+
+![Downside Risk](https://img.shields.io/badge/DOWNSIDE_RISK-B7791F?style=for-the-badge)
+| Measure | Method | Purpose |
+|---|---|---|
+| Historical VaR | Empirical return distribution | Estimate a historical quantile loss threshold |
+| Parametric VaR | Normal distribution | Estimate a model-based loss threshold |
+| Monte Carlo VaR | Multivariate normal simulation | Estimate a simulated loss threshold |
+| Expected Shortfall | Average loss beyond VaR | Measure tail-loss severity |
+
+
+![Model Validation](https://img.shields.io/badge/MODEL_VALIDATION-B94A55?style=for-the-badge)
+| Measure | Method | Purpose |
+|---|---|---|
+| VaR Backtesting | Kupiec POF test | Evaluate whether the observed exception rate is consistent with the expected rate |
+| VaR Backtesting | Christoffersen tests | Evaluate exception independence and conditional coverage |
+
+
+![Stress Testing](https://img.shields.io/badge/STRESS_TESTING-7652A3?style=for-the-badge)
+| Measure | Method | Purpose |
+|---|---|---|
+| Historical Stress | Historical stock returns and shocks | Assess portfolio sensitivity to historical market events |
+| Custom Scenarios | User-defined stock shocks | Evaluate hypothetical adverse scenarios |
+| Stress Attribution | Stock-level P&L contributions | Identify the contribution of individual stocks to portfolio stress losses |
+
+## Technology Stack
+
+-   Python
+-   Streamlit
+-   Pandas
+-   NumPy
+-   Plotly
+-   SciPy
+-   yfinance
+-   ARCH
+
+## Project Structure
+
+The following is the intended high-level structure. Adjust filenames if
+the repository uses different names.
+
+``` text
+market-risk-engine/
 ├── app.py
+├── requirements.txt
+├── data/
+│   └── stock_universe.csv
 ├── pages/
+│   ├── 0_Executive_Dashboard.py
 │   ├── 1_Portfolio_Construction.py
-│   └── 2_Market_Data_Analytics.py
+│   ├── 2_Market_Data_Analytics.py
+│   ├── 3_VaR_and_ES.py
+│   ├── 4_Backtesting.py
+│   └── 5_Stress_Testing.py
 ├── src/
-│   ├── __init__.py
-│   ├── market_data.py
-│   ├── portfolio_construction.py
-│   └── market_data_analytics.py
-└── notebooks/
-    └── market_modules.ipynb
+    ├── market_data.py
+    ├── market_data_analytics.py
+    ├── portfolio_construction.py
+    ├── value_at_risk.py
+    ├── backtesting.py
+    ├── drawdown.py
+    └── stress_testing.py
+
 ```
 
-Copy these three modules into the project's `src/` directory. Keep notebook-only
-controls such as `ipywidgets.interact()` out of the modules. In Streamlit, use
-`st.selectbox`, `st.slider`, `st.date_input`, etc. to collect inputs.
+`app.py` initializes shared session state and defines the six-page
+navigation. `pages/` contains the Streamlit user interface. `src/`
+contains reusable market-data, portfolio and risk calculations.
+`data/stock_universe.csv` provides the available stock tickers.
 
-## Example: download data and build a portfolio
+## Installation
 
-```python
-import pandas as pd
+### 1. Clone the repository
 
-from src.market_data import download_data
-from src.portfolio_construction import (
-    calculate_portfolio_returns,
-    calculate_portfolio_value,
-    calculate_portfolio_metrics,
-    plot_portfolio_vs_assets,
-    plot_allocation_over_time,
-    plot_current_allocation,
-)
-
-# Download a common 10-year daily price history.
-tickers = ["SPY", "AGG", "QQQ"]
-prices, data_quality, has_warnings = download_data(tickers, period="10y")
-
-# Select the dates used for the portfolio simulation.
-investment_start = "2021-01-01"
-investment_end = "2025-12-31"
-investment_prices = prices.loc[investment_start:investment_end].copy()
-
-# The calculation module requires complete, positive prices for all selected
-# assets on all selected dates. Do not silently interpolate missing prices.
-investment_prices = investment_prices.dropna(how="any")
-
-weights = pd.Series({"SPY": 0.50, "AGG": 0.30, "QQQ": 0.20})
-portfolio_returns, allocation_drift = calculate_portfolio_returns(
-    investment_prices, weights, rebalance_frequency="Monthly"
-)
-
-portfolio_value = calculate_portfolio_value(
-    portfolio_returns,
-    initial_investment=100_000,
-    initial_date=investment_prices.index[0],
-)
-
-metrics = calculate_portfolio_metrics(portfolio_value, risk_free_rate=0.04)
-
-# Notebook display:
-plot_portfolio_vs_assets(investment_prices, portfolio_value).show()
-plot_allocation_over_time(allocation_drift).show()
-plot_current_allocation(allocation_drift).show()
-print(metrics)
+``` bash
+git clone https://github.com/VineedMindForge/RiskForge.git
+cd RiskForge
 ```
 
-## Example: market analytics
+### 2. Create and activate a virtual environment
 
-```python
-from src.market_data_analytics import (
-    calculate_asset_statistics,
-    calculate_asset_returns,
-    calculate_return_statistics,
-    vol_analysis,
-    calculate_correlation_matrix,
-    calculate_rolling_correlation,
-    calculate_normality_test,
-    plot_asset_volatility,
-    plot_correlation_heatmap,
-    plot_rolling_correlation,
-)
+**Windows**
 
-# Use the full downloaded history for market data analysis.
-daily_returns = calculate_asset_returns(prices)
-asset_statistics = calculate_asset_statistics(prices)
-return_statistics = calculate_return_statistics(daily_returns)
-vol_stats, annual_asset_vol = vol_analysis(daily_returns, window=30, lambda_=0.94)
-correlation_matrix = calculate_correlation_matrix(daily_returns)
-normality_results = calculate_normality_test(daily_returns)
-
-# Notebook display examples:
-plot_asset_volatility("SPY", vol_stats, annual_asset_vol).show()
-plot_correlation_heatmap(correlation_matrix).show()
-rolling = calculate_rolling_correlation(daily_returns, "SPY", "AGG", window=60)
-plot_rolling_correlation(rolling, "SPY", "AGG", window=60).show()
+``` bash
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
-## Use in a Streamlit page
+**macOS / Linux**
 
-A calculation function returns a figure; it does not display it. The page decides
-where it appears:
-
-```python
-import streamlit as st
-from src.portfolio_construction import plot_allocation_over_time
-
-fig = plot_allocation_over_time(allocation_drift)
-st.plotly_chart(fig, use_container_width=True)
+``` bash
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-## Methodology assumptions to be aware of
+### 3. Install dependencies
 
-1. All portfolio functions assume long-only weights that sum to 1.
-2. All assets in a portfolio simulation must have complete, valid prices on the
-   same dates. The example drops rows with any missing asset price; inspect the
-   data-quality report first and be aware this shortens the sample.
-3. Daily rebalancing means target weights are restored before each day's return.
-4. Monthly rebalancing means target weights are restored before the first
-   available trading day's return in each new calendar month.
-5. Buy and Hold means initial holdings are retained and weights drift with prices.
-6. Rebalancing ignores commissions, taxes, slippage and market impact.
-7. Historical volatility, rolling volatility, EWMA and GARCH outputs are
-   annualised using `sqrt(252)`.
-8. `annual_asset_vol` in `vol_analysis()` is the full-sample historical
-   annualised volatility and is intended as a constant reference line.
-9. The Sharpe ratio uses annualised arithmetic mean daily return less the
-   annual risk-free rate, divided by annualised volatility.
-10. The Jarque-Bera output `normality_not_rejected=True` means the null of
-    normality was not rejected at the selected significance level; it does not
-    establish that returns are normally distributed.
+``` bash
+pip install -r requirements.txt
+```
+
+### 4. Check the stock universe
+
+Ensure `data/stock_universe.csv` exists and contains a column named
+`ticker`. Add the ticker symbols you want users to be able to select.
+
+## Run the Application
+
+From the project root:
+
+``` bash
+streamlit run app.py
+```
+
+Open the local URL printed in the terminal (normally
+`http://localhost:8501`) and use the sidebar to navigate between the six
+pages.
+
+## Assumptions and Limitations
+
+1.  **Equity-only scope:** The current application analyzes selected
+    stocks. It does not currently model bonds, currencies, commodities,
+    options or other asset classes.
+2.  **Market data source:** Adjusted daily closing prices are retrieved
+    through `yfinance`; availability and quality depend on the provider.
+3.  **Annualization:** Volatility calculations use 252 trading days per
+    year.
+4.  **Long-only weights:** Portfolio weights must be non-negative and
+    sum to 100%.
+5.  **Rebalancing:** Buy and Hold, Daily and Monthly rebalancing produce
+    different portfolio returns and risk results.
+6.  **Missing data:** Missing prices are not automatically interpolated
+    or forward-filled. Portfolio calculations use observations that
+    satisfy the relevant data requirements.
+7.  **Historical VaR:** Results depend on the selected historical sample
+    and cannot capture losses outside the observed sample.
+8.  **Parametric VaR:** The normal-distribution assumption may not
+    represent fat tails or other non-normal characteristics of equity
+    returns.
+9.  **Monte Carlo VaR:** The current simulation uses multivariate normal
+    asset returns estimated from historical means and covariance. It
+    does not represent every possible source of market risk.
+10. **Stress tests:** Scenario results are conditional calculations, not
+    forecasts or probability estimates.
+11. **Risk limits:** Any user-configured thresholds are illustrative
+    unless calibrated and approved for a defined investment mandate.
+
+## Limitations and Future Enhancements
+
+Potential extensions include fat-tailed Monte Carlo distributions,
+alternative covariance and volatility forecasts, more advanced
+historical simulation using current holdings and stock-level shocks,
+transaction costs and turnover, additional portfolio constraints,
+expanded asset-class support, more comprehensive risk-limit
+configuration and automated reporting.
+
+These are possible future enhancements, not claims about the current
+implementation.
+
+## Disclaimer
+
+This project is developed for educational, analytical and portfolio risk
+modelling purposes. It is not investment advice and should not be
+treated as a production risk management system.
+
+External market data may be incomplete, delayed, revised or unavailable.
+VaR, Expected Shortfall, volatility estimates, backtesting results and
+stress scenarios are model outputs based on assumptions and historical
+observations. They do not guarantee future performance or define the
+maximum possible loss.
