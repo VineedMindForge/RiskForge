@@ -14,7 +14,7 @@ from src.portfolio_construction import (
     plot_current_allocation
 )
 
-
+st.write("Available assets initialized:", "available_assets" in st.session_state)
 # --------------------------------------------------
 # PAGE CONFIGURATION
 # --------------------------------------------------
@@ -125,6 +125,10 @@ def save_rebalance_frequency():
 # --------------------------------------------------
 # SIDEBAR: PORTFOLIO SETTINGS
 # --------------------------------------------------
+
+if "available_assets" not in st.session_state:
+    stock_universe = pd.read_csv("data/stock_universe.csv")
+    st.session_state.available_assets = stock_universe["ticker"].dropna().astype(str).tolist()
 
 available_assets = st.session_state.available_assets
 
