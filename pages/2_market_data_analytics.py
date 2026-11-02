@@ -61,10 +61,15 @@ if any(key not in st.session_state for key in required_state):
 # LOAD PORTFOLIO DATA
 # --------------------------------------------------
 
-prices = st.session_state.portfolio_prices
-selected_assets = st.session_state.selected_assets
+prices = st.session_state.get("portfolio_prices")
+selected_assets = st.session_state.get("selected_assets", [])
+
+if prices is None or prices.empty:
+    st.warning("Construct a portfolio on the Portfolio Construction page first.")
+    st.stop()
 
 returns = prices.pct_change(fill_method=None).dropna()
+
 # --------------------------------------------------
 # SHARED MARKET DATA
 # --------------------------------------------------

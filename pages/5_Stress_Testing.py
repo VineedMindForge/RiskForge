@@ -18,7 +18,7 @@ st.title("Stress Testing")
 st.caption("Evaluate portfolio resilience under historical and hypothetical market stress scenarios.")
 
 if st.session_state.get("portfolio_returns") is None:
-    st.warning("Please construct a portfolio first.")
+    st.warning("Construct a portfolio on the Portfolio Construction page first.")
     st.stop()
 
 portfolio_returns = st.session_state.portfolio_returns.dropna()
@@ -362,6 +362,3 @@ with st.form("custom_stress_form"):
                     f"${stress_result['stressed_portfolio_value']:,.2f}"
                 )
 
-st.write("Portfolio value series:", st.session_state.portfolio_value)
-st.write("Initial portfolio value:", st.session_state.portfolio_value.iloc[0])
-st.write("Latest portfolio value:", st.session_state.portfolio_value.iloc[-1])
