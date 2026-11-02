@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 
+st.set_page_config(
+    page_title="Market Risk Engine",
+    layout="wide"
+)
 
 # --------------------------------------------------
 # SHARED APPLICATION SETTINGS
@@ -72,3 +76,49 @@ if "portfolio_metrics" not in st.session_state:
 
 if "portfolio_weights_decimal" not in st.session_state:
     st.session_state.portfolio_weights_decimal = None
+
+# --------------------------------------------------
+# SHARED RISK SETTINGS
+# --------------------------------------------------
+
+if "var_confidence_level" not in st.session_state:
+    st.session_state.var_confidence_level = 0.95
+
+if "var_holding_period" not in st.session_state:
+    st.session_state.var_holding_period = 1
+
+if "var_lookback_window" not in st.session_state:
+    st.session_state.var_lookback_window = 252
+
+if "var_simulations" not in st.session_state:
+    st.session_state.var_simulations = 10000
+
+
+# --------------------------------------------------
+# RISK LIMITS
+# --------------------------------------------------
+
+if "var_limit" not in st.session_state:
+    st.session_state.var_limit = 0.03
+
+if "max_drawdown_limit" not in st.session_state:
+    st.session_state.max_drawdown_limit = 0.15
+
+
+# --------------------------------------------------
+# APPLICATION NAVIGATION
+# --------------------------------------------------
+
+pages = {
+    "Market Risk Engine": [
+        st.Page("pages/0_Executive_Dashboard.py", title="Executive Dashboard"),
+        st.Page("pages/1_Portfolio_Construction.py", title="Portfolio Construction"),
+        st.Page("pages/2_Market_Data_Analytics.py", title="Market Data Analytics"),
+        st.Page("pages/3_VaR_and_ES.py", title="VaR and ES"),
+        st.Page("pages/4_Backtesting.py", title="Backtesting"),
+        st.Page("pages/5_Stress_Testing.py", title="Stress Testing")
+    ]
+}
+
+page = st.navigation(pages)
+page.run()
