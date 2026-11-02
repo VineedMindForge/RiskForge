@@ -39,8 +39,8 @@ st.divider()
 # --------------------------------------------------
 
 @st.cache_data
-def get_market_data(tickers, start, end):
-    return download_data(tickers, start=start, end=end)
+def get_market_data(tickers):
+    return download_data(tickers, period="10y")
 
 
 # --------------------------------------------------
@@ -312,15 +312,20 @@ st.caption(
     "and calculate its performance and risk metrics."
 )
 
-with st.spinner("Downloading market data..."):
+with st.spinner("Downloading up to 10 years of market data..."):
 
-    prices, quality_report, has_warnings = get_market_data(
-        tuple(selected_assets),
-        start_date.isoformat(),
-        (pd.Timestamp(end_date) + pd.Timedelta(days=1)).date().isoformat()
+    market_prices, quality_report, has_warnings = get_market_data(
+        tuple(selected_assets)
     )
 
-st.session_state.prices = prices
+# Keep the full history available to the other pages.
+st.session_state.market_prices = market_prices
+st.session_state.market_quality_report = quality_report
+st.session_state.market_data_warning = has_warnings
+st.session_state.market_data_assets = list(selected_assets)
+
+# Keep these names temporarily because the existing analytics page uses them.
+st.session_state.prices = market_prices
 st.session_state.quality_report = quality_report
 st.session_state.has_warnings = has_warnings
 
@@ -331,36 +336,33 @@ st.session_state.has_warnings = has_warnings
 with st.expander("Data Quality Report", expanded=False):
 
     display_quality_report = quality_report.drop(
-        columns=["latest_valid_price", "latest_valid_price_date"],
+        columns=["Latest Valid Price", "Latest Valid Price Date"],
         errors="ignore"
     ).copy()
 
-    display_quality_report["first_valid_date"] = (
-        pd.to_datetime(display_quality_report["first_valid_date"])
-        .dt.strftime("%Y-%m-%d")
-    )
+    for date_column in ["First Date", "Last Date"]:
+        display_quality_report[date_column] = (
+            pd.to_datetime(display_quality_report[date_column])
+            .dt.strftime("%Y-%m-%d")
+        )
 
-    display_quality_report["last_valid_date"] = (
-        pd.to_datetime(display_quality_report["last_valid_date"])
-        .dt.strftime("%Y-%m-%d")
-    )
-
-    display_quality_report["data_validation_warning"] = (
-        display_quality_report["data_validation_warning"]
+    display_quality_report["Data Warning"] = (
+        display_quality_report["Data Warning"]
         .map({True: "Warning", False: "No issues"})
     )
 
     if has_warnings:
         st.warning(
-            "Data quality warnings detected. Review the highlighted table."
+            "Data quality warnings detected within the available history. "
+            "Dates before an asset's first available price are not treated as missing data."
         )
         table_color = "#4A3514"
     else:
-        st.success("All data quality checks passed. No issues detected.")
+        st.success("No data-quality issues detected within the available history.")
         table_color = "#123524"
 
     def highlight_quality(row):
-        if row["data_validation_warning"] == "Warning":
+        if row["Data Warning"] == "Warning":
             return [
                 f"background-color: {table_color}; color: #F8FAFC"
             ] * len(row)
@@ -374,21 +376,38 @@ with st.expander("Data Quality Report", expanded=False):
 
     st.dataframe(
         styled_quality_report,
-        use_container_width=True,
-        hide_index=True
+        use_container_width=True
     )
 
 
 # --------------------------------------------------
-# DATA CLEANING
+# SELECT THE INVESTMENT PERIOD
 # --------------------------------------------------
 
+# Keep only the dates selected by the user, then retain dates where every
+# selected asset has a valid price. This creates a common history for the portfolio.
+prices = market_prices.loc[str(start_date):str(end_date)].copy()
 prices = prices.replace([np.inf, -np.inf], np.nan)
-prices = prices.where(prices > 0).dropna()
+prices = prices.where(prices > 0)
+prices = prices.dropna(how="any")
 
 if len(prices) < 2:
-    st.error("Insufficient valid price observations for portfolio construction.")
+    st.error(
+        "There are not enough common price observations for all selected assets "
+        "within the chosen investment period. Select a later start date or a longer period."
+    )
     st.stop()
+
+actual_start_date = prices.index[0].date()
+actual_end_date = prices.index[-1].date()
+
+st.session_state.portfolio_prices = prices
+
+st.info(
+    f"Portfolio calculations use the common available trading history "
+    f"from {actual_start_date} to {actual_end_date}. "
+    f"You requested {start_date} to {end_date}."
+)
 
 
 # --------------------------------------------------
@@ -432,6 +451,8 @@ portfolio_metrics = calculate_portfolio_metrics(
 
 st.session_state.portfolio_prices = prices
 st.session_state.portfolio_quality_report = quality_report
+st.session_state.portfolio_start_date = prices.index[0]
+st.session_state.portfolio_end_date = prices.index[-1]
 st.session_state.portfolio_returns = portfolio_returns
 st.session_state.allocation_drift = allocation_drift
 st.session_state.portfolio_value = portfolio_value
