@@ -7,6 +7,13 @@ from src.value_at_risk import (calculate_var_comparison,  plot_var_es_comparison
     calculate_var_sensitivity,
     plot_var_sensitivity)
 
+from src.drawdown import (
+    calculate_drawdown,
+    calculate_drawdown_metrics,
+    plot_drawdown,
+    plot_cumulative_return_drawdown
+)
+
 
 # --------------------------------------------------
 # PAGE CONFIGURATION
@@ -313,3 +320,89 @@ st.plotly_chart(
     fig_sensitivity,
     use_container_width=True
 )
+
+
+# --------------------------------------------------
+# DRAWDOWN
+# --------------------------------------------------
+
+st.divider()
+st.subheader("Drawdown Analysis")
+
+st.caption(
+    "Measures the decline in portfolio value from its previous peak, "
+    "highlighting the magnitude and duration of historical losses."
+)
+
+# Calculate drawdown
+portfolio_value = st.session_state.portfolio_value
+
+drawdown_results = calculate_drawdown(portfolio_value)
+drawdown = drawdown_results["drawdown"]
+
+drawdown_metrics = calculate_drawdown_metrics(
+    portfolio_value,
+    drawdown
+)
+
+# Drawdown metrics
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Maximum Drawdown",
+        f"{drawdown_metrics['max_drawdown']:.2%}"
+    )
+
+with col2:
+    st.metric(
+        "Current Drawdown",
+        f"{drawdown_metrics['current_drawdown']:.2%}"
+    )
+
+with col3:
+    st.metric(
+        "Peak-to-Trough",
+        f"{drawdown_metrics['peak_to_trough_duration']} trading days"
+    )
+
+with col4:
+    recovery_duration = drawdown_metrics["peak_to_recovery_duration"]
+
+    st.metric(
+        "Peak-to-Recovery",
+        f"{recovery_duration} trading days" if recovery_duration is not None else "Ongoing"
+    )
+
+# Drawdown chart
+st.plotly_chart(
+    plot_drawdown(drawdown),
+    use_container_width=True
+)
+
+# Drawdown period details
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.caption(f"Peak Date: {drawdown_metrics['peak_date'].date()}")
+
+with col2:
+    st.caption(f"Trough Date: {drawdown_metrics['trough_date'].date()}")
+
+with col3:
+    recovery_date = drawdown_metrics["recovery_date"]
+
+    st.caption(
+        f"Recovery Date: {recovery_date.date() if recovery_date is not None else 'Not yet recovered'}"
+    )
+
+st.plotly_chart(
+    plot_cumulative_return_drawdown(portfolio_value, drawdown, drawdown_metrics),
+    use_container_width=True
+)
+
+# Recovery status
+if drawdown_metrics["recovery_status"] == "Recovered":
+    st.success("The portfolio has recovered its previous peak.")
+else:
+    st.warning("The portfolio has not yet recovered its previous peak.")
